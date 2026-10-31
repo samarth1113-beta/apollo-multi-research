@@ -1,7 +1,9 @@
 # Apollo — Research you can trust
 
 Multi-agent deep research web application built for the **INNOVISTA Hackathon (Problem Statement 01)**.
-One research topic goes in. One fully cited, sentence-verified report comes out.
+Enter one research topic and Apollo plans the investigation, searches multiple sources, reviews evidence gaps, writes the report, and verifies its citations sentence by sentence.
+
+The current version also supports configurable API keys, research domains, platform mixes, live agent events, source-quality filtering, Both Sides conflict analysis, and a deterministic Judge mode.
 
 ---
 
@@ -13,24 +15,28 @@ The `backend\venv`, `frontend\node_modules`, build output, and `.env` files are 
 are intentionally excluded from Git.
 
 ### 1. Backend Setup
-Open PowerShell in the project root (`apollo-PROJECT`) and run:
+Open PowerShell in the repository root (`apollo-multi-research`) and run:
 
 ```powershell
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Open `backend\.env` and set your keys and OpenRouter models:
-- `OPENROUTER_API_KEY`: Your key from https://openrouter.ai/keys
-- `TAVILY_API_KEY`: Your key from https://app.tavily.com
-- `FAST_MODEL`: Fast model for section writing & Truth Meter (e.g. `openai/gpt-4o-mini` or `google/gemini-2.0-flash-001`)
-- `SMART_MODEL`: Reasoning model for Apollo planning, Hermes gap/conflict review, and report assembly (e.g. `openai/gpt-4o` or `anthropic/claude-3.5-sonnet`)
+Open `backend\.env` and configure your keys and OpenRouter models:
+- `OPENROUTER_API_KEY`: OpenRouter key from https://openrouter.ai/keys
+- `TAVILY_API_KEY`: Tavily key from https://app.tavily.com
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and optional provider/source keys: Additional integrations supported by the configuration panel
+- `FAST_MODEL`: Fast model for searching, section writing, and Truth Meter
+- `SMART_MODEL`: Stronger model for planning, review, Judge scoring, and report assembly
+
+API keys can also be added or updated locally from the React configuration panel. Keys are stored in `backend\.env` and expire after 30 days.
 
 ### 2. Frontend Setup
-Open a second PowerShell window in the project root (`apollo-PROJECT`) and run:
+Open a second PowerShell window in the repository root (`apollo-multi-research`) and run:
 
 ```powershell
 cd frontend
@@ -54,7 +60,7 @@ cd frontend
 npm run dev
 ```
 
-Then open **http://localhost:5173** in your browser.
+Then open **http://localhost:5173** in your browser. The backend health endpoint is available at **http://localhost:8000/api/health**.
 
 ### Optional CLI Test Runner
 ```powershell
@@ -66,7 +72,7 @@ python test_run.py "Stubble burning policy in a single small village of Fatehgar
 
 ---
 
-## Architecture in 10 Lines
+## Architecture Overview
 
 1. **FastAPI + SSE Backend (`backend/main.py`, `events.py`)**: Starts asynchronous research runs (`POST /api/research`) and streams live agent events over Server-Sent Events (`GET /api/research/{run_id}/stream`).
 2. **LangGraph State Machine (`backend/graph.py`)**: Orchestrates an 8-stage pipeline (`plan` → `search` → `score` → `review` → loop/stop → `write` → `truth_check` → `done`).
@@ -77,7 +83,8 @@ python test_run.py "Stubble burning policy in a single small village of Fatehgar
 7. **Deterministic Loop Control (`backend/graph.py`)**: Pure Python conditional edge enforces `MAX_REVIEW_ROUNDS` (3) and `RUN_TIMEOUT_SECONDS` (360s) before looping back to search only for remaining gaps.
 8. **Parallel Section Writers + Assembler (`agents/writer.py`)**: Drafts each section in parallel (`FAST_MODEL`) using strictly that section's globally numbered `[n]` sources, then assembles a cohesive report (`SMART_MODEL`).
 9. **Truth Meter Verifier (`agents/truth_meter.py`)**: Splits the report into sentences, checks every cited sentence against its cited source text (`FAST_MODEL` + code check for valid IDs), and computes the overall Trust Score.
-10. **React + Vite + Tailwind Dark UI (`frontend/src/App.jsx`)**: Displays the live SSE timeline and counters alongside interactive Report, Both Sides, Sources, and Plan tabs with Markdown/PDF export.
+10. **React + Vite + Tailwind UI (`frontend/src/App.jsx`)**: Displays live SSE events, research controls, configuration, source/platform filtering, and interactive Report, Both Sides, Sources, and Plan views with Markdown/PDF export.
+11. **Optional Judge Mode (`agents/judge.py`)**: Adds a separate judging pass for section-by-section evaluation and final quality scoring after the research report is assembled.
 
 ---
 
@@ -94,9 +101,8 @@ python test_run.py "Stubble burning policy in a single small village of Fatehgar
 
 ## Future Ideas
 
-- **Judge Mode**: Allow users or domain experts to upvote/override sentence verdicts and re-weight source credibility rules interactively.
-- **Debate Mode**: Pit two specialized agents against each other on controversial topics, each defending one side using verified citations before a synthesis judge writes the conclusion.
-- **More Domains**: Add specialized connectors for **Finance** (SEC/NSE filings, market data) and **Product Comparison** (synthesizing real user reviews from YouTube transcripts and Reddit threads).
-- **API Key Screen in UI**: Provide an encrypted local settings modal in the web UI so users can paste or switch OpenRouter/Tavily keys and models without editing `.env`.
-- **Hindi Reports**: One-click bilingual/Hindi report generation (`हिन्दी`) while preserving exact `[n]` source citations and Truth Meter highlights.
-- **Run History**: Persist past research runs in local storage / SQLite so users can revisit, compare, and re-export previous reports anytime.
+- **Human Judging**: Let users or domain experts override sentence verdicts and adjust source-credibility weights interactively.
+- **Debate Mode**: Put specialized agents on opposing sides of a controversial topic, then synthesize their cited arguments into a balanced conclusion.
+- **More Domains**: Add connectors for Finance (SEC/NSE filings, market data), Product Comparison, and other evidence-heavy research categories.
+- **Hindi Reports**: Add one-click bilingual/Hindi report generation (`हिन्दी`) while preserving exact `[n]` citations and Truth Meter highlights.
+- **Persistent Run History**: Store completed runs in SQLite or local storage so users can revisit, compare, and re-export reports.
